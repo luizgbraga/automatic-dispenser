@@ -8,10 +8,12 @@ import SwiftUI
 
 struct DeviceConfigurationView: View {
     @EnvironmentObject private var connectionService: DispenserConnectionService
-    @EnvironmentObject private var mockDataService: MockDataService
+    @EnvironmentObject private var dataService: DispenserDataService
     
     @State private var selectedCompartment: MedicineCompartment?
     @State private var showingCompartmentConfig = false
+    @State private var isLoading = false
+    @State private var errorMessage: String?
     
     var body: some View {
         NavigationView {
@@ -33,10 +35,37 @@ struct DeviceConfigurationView: View {
                     CompartmentConfigurationView(
                         compartment: compartment,
                         onSave: { updatedCompartment in
-                            mockDataService.updateCompartment(updatedCompartment)
-                            selectedCompartment = nil
+                            Task {
+                                do {
+                                    try await dataService.updateCompartment(updatedCompartment)
+                                    await MainActor.run {
+                                        selectedCompartment = nil
+                                    }
+                                } catch {
+                                    await MainActor.run {
+                                        errorMessage = "Failed to update compartment: \(error.localizedDescription)"
+                                    }
+                                }
+                            }
                         }
                     )
+                }
+            }
+            .overlay {
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.2))
+                }
+            }
+            .alert("Error", isPresented: .constant(errorMessage != nil)) {
+                Button("OK") {
+                    errorMessage = nil
+                }
+            } message: {
+                if let errorMessage = errorMessage {
+                    Text(errorMessage)
                 }
             }
         }
@@ -63,7 +92,7 @@ struct DeviceConfigurationView: View {
     
     private var compartmentsGridView: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
-            ForEach(mockDataService.compartments) { compartment in
+            ForEach(dataService.compartments) { compartment in
                 CompartmentItemView(compartment: compartment)
                     .onTapGesture {
                         selectedCompartment = compartment

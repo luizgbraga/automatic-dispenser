@@ -8,12 +8,12 @@
 import SwiftUI
 
 struct HistoryView: View {
-    @EnvironmentObject private var mockDataService: MockDataService
+    @EnvironmentObject private var dataService: DispenserDataService
     @State private var selectedFilter: HistoryFilter = .all
     @State private var searchText = ""
     
     var filteredHistory: [MedicationEvent] {
-        let filtered = mockDataService.medicationHistory.filter { event in
+        let filtered = dataService.medicationHistory.filter { event in
             switch selectedFilter {
             case .all: return true
             case .taken: return event.status == .taken

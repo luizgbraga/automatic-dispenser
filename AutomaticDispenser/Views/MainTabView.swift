@@ -9,7 +9,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @StateObject private var connectionService = DispenserConnectionService()
-    @StateObject private var mockDataService = MockDataService()
+    @StateObject private var dataService = DispenserDataService()
     
     var body: some View {
         TabView {
@@ -21,19 +21,19 @@ struct MainTabView: View {
             
             DeviceConfigurationView()
                 .environmentObject(connectionService)
-                .environmentObject(mockDataService)
+                .environmentObject(dataService)
                 .tabItem {
                     Label("Configure", systemImage: "gear")
                 }
             
             HistoryView()
-                .environmentObject(mockDataService)
+                .environmentObject(dataService)
                 .tabItem {
                     Label("History", systemImage: "clock")
                 }
             
             AlertsView()
-                .environmentObject(mockDataService)
+                .environmentObject(dataService)
                 .tabItem {
                     Label("Alerts", systemImage: "bell")
                 }

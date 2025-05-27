@@ -14,60 +14,85 @@ class DispenserConnectionService: ObservableObject {
     @Published var isSearching = false
     @Published var errorMessage: String?
     
+    private let apiService = APIService.shared
+    
     func searchForDevices() {
         isSearching = true
         errorMessage = nil
         
-        // Simulate network delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            guard let self = self else { return }
-            
-            // Mock found devices
-            self.discoveredDevices = [
-                DispenserDevice(name: "MedDispenser-Kitchen", ipAddress: "192.168.1.100"),
-                DispenserDevice(name: "MedDispenser-Bedroom", ipAddress: "192.168.1.101"),
-                DispenserDevice(name: "MedDispenser-Livingroom", ipAddress: "192.168.1.102")
-            ]
-            
-            self.isSearching = false
+        Task {
+            do {
+                let deviceInfo = try await apiService.getDeviceInfo()
+                await MainActor.run {
+                    let device = DispenserDevice(
+                        name: deviceInfo.name,
+                        ipAddress: deviceInfo.ipAddress,
+                    )
+                    self.discoveredDevices = [device]
+                    self.isSearching = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Failed to discover devices: \(error.localizedDescription)"
+                    self.isSearching = false
+                }
+            }
         }
     }
     
     func connectToDevice(_ device: DispenserDevice) {
         isSearching = true
         
-        // Simulate connection delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self = self else { return }
-            
-            // Update the connected device with connected status
-            var updatedDevice = device
-            updatedDevice.isConnected = true
-            self.connectedDevice = updatedDevice
-            
-            // Update the discovered devices list
-            if let index = self.discoveredDevices.firstIndex(where: { $0.id == device.id }) {
-                self.discoveredDevices[index].isConnected = true
+        Task {
+            do {
+                let deviceInfo = try await apiService.getDeviceInfo()
+                await MainActor.run {
+                    var updatedDevice = device
+                    updatedDevice.isConnected = true
+                    self.connectedDevice = updatedDevice
+                    
+                    if let index = self.discoveredDevices.firstIndex(where: { $0.id == device.id }) {
+                        self.discoveredDevices[index].isConnected = true
+                    }
+                    
+                    self.isSearching = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Failed to connect to device: \(error.localizedDescription)"
+                    self.isSearching = false
+                }
             }
-            
-            self.isSearching = false
         }
     }
     
     func disconnectFromDevice() {
         guard connectedDevice != nil else { return }
         
-        // Simulate disconnection delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self = self else { return }
-            
-            // Update the discovered devices list
-            if let connectedDevice = self.connectedDevice,
-               let index = self.discoveredDevices.firstIndex(where: { $0.id == connectedDevice.id }) {
-                self.discoveredDevices[index].isConnected = false
+        Task {
+            await MainActor.run {
+                if let connectedDevice = self.connectedDevice,
+                   let index = self.discoveredDevices.firstIndex(where: { $0.id == connectedDevice.id }) {
+                    self.discoveredDevices[index].isConnected = false
+                }
+                self.connectedDevice = nil
             }
-            
-            self.connectedDevice = nil
         }
+    }
+    
+    func configureWiFi(ssid: String, password: String, timezoneOffset: Int) async throws {
+        try await apiService.configureWiFi(ssid: ssid, password: password, timezoneOffset: timezoneOffset)
+    }
+    
+    func setPillSchedule(schedule: [PillScheduleItem]) async throws {
+        try await apiService.setPillSchedule(schedule: schedule)
+    }
+    
+    func getCurrentSchedule() async throws -> [PillScheduleItem] {
+        return try await apiService.getCurrentSchedule()
+    }
+    
+    func dispensePills(count: Int) async throws {
+        try await apiService.dispensePills(count: count)
     }
 }

@@ -8,12 +8,14 @@
 import SwiftUI
 
 struct AlertsView: View {
-    @EnvironmentObject private var mockDataService: MockDataService
+    @EnvironmentObject private var dataService: DispenserDataService
+    @State private var isLoading = false
+    @State private var errorMessage: String?
     
     var body: some View {
         NavigationView {
             VStack {
-                if mockDataService.alerts.isEmpty {
+                if dataService.alerts.isEmpty {
                     emptyStateView
                 } else {
                     alertsListView
@@ -21,15 +23,36 @@ struct AlertsView: View {
             }
             .navigationTitle("Medication Alerts")
             .background(Color.gray.opacity(0.1).ignoresSafeArea())
+            .overlay {
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.2))
+                }
+            }
+            .alert("Error", isPresented: .constant(errorMessage != nil)) {
+                Button("OK") {
+                    errorMessage = nil
+                }
+            } message: {
+                if let errorMessage = errorMessage {
+                    Text(errorMessage)
+                }
+            }
         }
     }
     
     private var alertsListView: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ForEach(mockDataService.alerts) { alert in
-                    AlertItemView(alert: alert)
-                        .padding(.horizontal)
+                ForEach(dataService.alerts) { alert in
+                    AlertItemView(alert: alert) { action in
+                        Task {
+                            await handleAlertAction(alert, action: action)
+                        }
+                    }
+                    .padding(.horizontal)
                 }
             }
             .padding(.vertical)
@@ -56,10 +79,43 @@ struct AlertsView: View {
         }
         .padding()
     }
+    
+    private func handleAlertAction(_ alert: MedicationEvent, action: AlertAction) async {
+        await MainActor.run { isLoading = true }
+        
+        do {
+            switch action {
+            case .markAsTaken:
+                // Find the corresponding compartment
+                if let compartment = dataService.compartments.first(where: { $0.number == alert.compartmentNumber }) {
+                    try await dataService.dispensePills(from: compartment)
+                }
+            case .dismiss:
+                // Remove from alerts
+                await MainActor.run {
+                    if let index = dataService.alerts.firstIndex(where: { $0.id == alert.id }) {
+                        dataService.alerts.remove(at: index)
+                    }
+                }
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to handle alert: \(error.localizedDescription)"
+            }
+        }
+        
+        await MainActor.run { isLoading = false }
+    }
+}
+
+enum AlertAction {
+    case markAsTaken
+    case dismiss
 }
 
 struct AlertItemView: View {
     let alert: MedicationEvent
+    let onAction: (AlertAction) -> Void
     
     var body: some View {
         HStack(spacing: 15) {
@@ -89,7 +145,7 @@ struct AlertItemView: View {
                     Spacer()
                     
                     Button(action: {
-                        // Mark as taken action
+                        onAction(.markAsTaken)
                     }) {
                         Text("Mark as Taken")
                             .font(.caption)
@@ -101,7 +157,7 @@ struct AlertItemView: View {
                     }
                     
                     Button(action: {
-                        // Dismiss action
+                        onAction(.dismiss)
                     }) {
                         Text("Dismiss")
                             .font(.caption)
