@@ -14,10 +14,78 @@ class DispenserDataService: ObservableObject {
     @Published var alerts: [MedicationEvent] = []
     
     private let apiService = APIService.shared
+    private var pollingTimer: Timer?
+    private var lastPollTime: Date?
     
     init() {
         Task {
             await loadCurrentSchedule()
+            startPolling()
+        }
+    }
+    
+    deinit {
+        stopPolling()
+    }
+    
+    private func startPolling() {
+        pollingTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            Task {
+                await self?.checkForDispensedPills()
+            }
+        }
+    }
+    
+    private func stopPolling() {
+        pollingTimer?.invalidate()
+        pollingTimer = nil
+    }
+    
+    private func checkForDispensedPills() async {
+        do {
+            let schedule = try await apiService.getCurrentSchedule()
+            let currentTime = Date()
+
+            for (index, item) in schedule.enumerated() {
+                guard let compartment = compartments.first(where: { $0.number == index + 1 }) else { continue }
+                
+                let scheduledTime = DispenserDataService.createTime(hour: item.hour, minute: item.minute)
+                
+                if lastPollTime == nil || scheduledTime > lastPollTime! {
+                    if scheduledTime <= currentTime {
+                        let hasHistoryEntry = medicationHistory.contains { event in
+                            event.compartmentNumber == compartment.number &&
+                            Calendar.current.isDate(event.scheduledTime, inSameDayAs: scheduledTime) &&
+                            Calendar.current.component(.hour, from: event.scheduledTime) == item.hour &&
+                            Calendar.current.component(.minute, from: event.scheduledTime) == item.minute
+                        }
+                        
+                        if !hasHistoryEntry {
+                            let event = MedicationEvent(
+                                compartmentNumber: compartment.number,
+                                medicineName: compartment.medicineName,
+                                scheduledTime: scheduledTime,
+                                actualTime: nil,
+                                status: .pending,
+                                pillsTaken: item.pills
+                            )
+                            
+                            await MainActor.run {
+                                medicationHistory.append(event)
+                                alerts.append(event)
+                            }
+                            
+                            NotificationService.shared.scheduleNotification(for: event)
+                        }
+                    }
+                }
+            }
+            
+            await MainActor.run {
+                lastPollTime = currentTime
+            }
+        } catch {
+            print("Failed to check for dispensed pills: \(error)")
         }
     }
     

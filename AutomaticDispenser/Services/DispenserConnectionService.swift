@@ -25,8 +25,8 @@ class DispenserConnectionService: ObservableObject {
                 let deviceInfo = try await apiService.getDeviceInfo()
                 await MainActor.run {
                     let device = DispenserDevice(
-                        name: deviceInfo.name,
-                        ipAddress: deviceInfo.ipAddress,
+                        name: deviceInfo.device_name,
+                        ipAddress: deviceInfo.ap_ip,
                     )
                     self.discoveredDevices = [device]
                     self.isSearching = false

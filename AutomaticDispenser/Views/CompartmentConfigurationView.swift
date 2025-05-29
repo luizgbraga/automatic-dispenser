@@ -9,11 +9,13 @@ import SwiftUI
 
 struct CompartmentConfigurationView: View {
     @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject private var dataService: DispenserDataService
     
     @State private var compartment: MedicineCompartment
     @State private var frequencyType: FrequencyType = .daily
     @State private var timesPerDay: Int = 1
     @State private var specificTimes: [Date] = [Date()]
+    @State private var isDispensing = false
     
     let onSave: (MedicineCompartment) -> Void
     
@@ -81,9 +83,18 @@ struct CompartmentConfigurationView: View {
                 if compartment.isConfigured {
                     Section {
                         Button("Test Dispense") {
-                            // Mock a dispense test
+                            isDispensing = true
+                            Task {
+                                do {
+                                    try await dataService.dispensePills(from: compartment)
+                                } catch {
+                                    print("Failed to dispense pills: \(error)")
+                                }
+                                isDispensing = false
+                            }
                         }
                         .foregroundColor(.blue)
+                        .disabled(isDispensing)
                     }
                 }
             }

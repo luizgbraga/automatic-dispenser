@@ -14,14 +14,18 @@ class APIService {
     
     private init() {}
     
-    // MARK: - Device Info
     func getDeviceInfo() async throws -> DeviceInfo {
         guard let url = URL(string: "\(baseURL)/info") else {
             throw APIError.invalidURL
         }
         
         let (data, _) = try await URLSession.shared.data(from: url)
-        return try JSONDecoder().decode(DeviceInfo.self, from: data)
+        do {
+            return try JSONDecoder().decode(DeviceInfo.self, from: data)
+        } catch {
+            print("There was an error decoding the JSON: \(error)")
+            throw error
+        }
     }
     
     func configureWiFi(ssid: String, password: String, timezoneOffset: Int) async throws {
@@ -70,8 +74,13 @@ class APIService {
         }
         
         let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(ScheduleResponse.self, from: data)
-        return response.schedule
+        do {
+            let response = try JSONDecoder().decode(ScheduleResponse.self, from: data)
+            return response.schedule
+        } catch {
+            print("There was an error decoding the JSON: \(error)")
+            throw error
+        }
     }
     
     func dispensePills(count: Int) async throws {
@@ -96,9 +105,14 @@ class APIService {
 }
 
 struct DeviceInfo: Codable {
-    let name: String
-    let ipAddress: String
-    let firmwareVersion: String
+    let device_name: String
+    let version: String
+    let configured: Bool
+    let current_time: String
+    let schedule_count: Int
+    let wifi_connected: Bool
+    let ap_ip: String
+    let wifi_ip: String
 }
 
 struct WiFiConfig: Codable {
