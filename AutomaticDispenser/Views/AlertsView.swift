@@ -14,15 +14,19 @@ struct AlertsView: View {
     
     var body: some View {
         NavigationView {
-            VStack {
-                if dataService.alerts.isEmpty {
-                    emptyStateView
-                } else {
-                    alertsListView
+            ZStack {
+                Color.gray.opacity(0.1)
+                    .ignoresSafeArea()
+                
+                VStack {
+                    if dataService.alerts.isEmpty {
+                        emptyStateView
+                    } else {
+                        alertsListView
+                    }
                 }
             }
             .navigationTitle("Medication Alerts")
-            .background(Color.gray.opacity(0.1).ignoresSafeArea())
             .overlay {
                 if isLoading {
                     ProgressView()
